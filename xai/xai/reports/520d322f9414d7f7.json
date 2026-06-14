@@ -1,0 +1,102 @@
+{
+  "report_id": "520d322f9414d7f7",
+  "created_at": "2026-06-14T17:04:48.855268Z",
+  "generated_by": {
+    "email": "abdulrahmanmohammadirfan@gmail.com",
+    "role": "user"
+  },
+  "payload": "txtName=pooplom&mtxMessage=<script>alert(\"ladasd\")</script>&btnSign=Sign Guestbook",
+  "label": 2,
+  "attack_type": "XSS",
+  "subtype": "Script-tag XSS",
+  "confidence": 0.9000919401116567,
+  "explanation": [
+    {
+      "token": "script",
+      "tfidf": 0.9825452528765882
+    },
+    {
+      "token": "alert",
+      "tfidf": 0.18602372442697046
+    }
+  ],
+  "specific_explanation": [
+    "The payload contains a <script> tag, which is a direct client-side script injection pattern.",
+    "If rendered unsafely, the browser may execute attacker-controlled JavaScript.",
+    "Strong matched indicators: script_tag",
+    "Weak matched indicators: angle_brackets, alert_call"
+  ],
+  "meta": {
+    "honeypot": "DVWA",
+    "ip": "127.0.0.1",
+    "user_agent": null,
+    "path": "http://localhost/dvwa/vulnerabilities/xss_s/",
+    "method": "POST",
+    "created_at": "2026-06-14T17:04:21.022711Z"
+  },
+  "decision": {
+    "raw_pred": 2,
+    "proba": {
+      "0": 0.09503642649117224,
+      "1": 0.002191238245614316,
+      "2": 0.9000919401116567,
+      "3": 0.0026803951515566643
+    },
+    "pattern_hits": {
+      "sqli": {
+        "strong": [],
+        "weak": []
+      },
+      "xss": {
+        "strong": [
+          "script_tag"
+        ],
+        "weak": [
+          "angle_brackets",
+          "alert_call"
+        ]
+      },
+      "lfi": {
+        "strong": [],
+        "weak": []
+      }
+    },
+    "decision_reason": "multi_allowed_choose_highest",
+    "thresholds": {
+      "sqli": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "xss": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "lfi": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      }
+    }
+  },
+  "summary": {
+    "message": "XSS detected with subtype: Script-tag XSS",
+    "severity": "HIGH"
+  },
+  "impact": {
+    "possible_impact": [
+      "Execution of attacker-controlled JavaScript in the victim browser.",
+      "Session theft, token theft, UI manipulation, or phishing-style redirection."
+    ]
+  },
+  "attack_preconditions": [
+    "User-controlled data is rendered in browser output without proper escaping.",
+    "The application allows executable HTML or script-like payloads to reach the response."
+  ],
+  "mitigation": [
+    "Apply strict output encoding for HTML, attributes, URLs, and JavaScript contexts.",
+    "Enable Content-Security-Policy (CSP) to reduce script execution risk.",
+    "Sanitize rich HTML input with a strict allow-list if HTML is required."
+  ]
+}

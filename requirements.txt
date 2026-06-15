@@ -11,3 +11,4 @@ gunicorn
 playwright
 requests
 beautifulsoup4
+PyJWT

@@ -10,3 +10,4 @@ joblib
 gunicorn
 playwright
 requests
+beautifulsoup4

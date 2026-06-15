@@ -365,7 +365,7 @@ def send_attack_alert_email(to_email, honeypot, method, url, payload, severity="
     smtp_password = os.getenv("SMTP_PASS") or os.getenv("EMAIL_PASS")
 
     if not smtp_email or not smtp_password:
-        raise ValueError("Missing EMAIL_USER or EMAIL_PASS in environment")
+        raise ValueError("Missing SMTP/EMAIL credentials in environment")
 
     short_payload = (payload or "-")[:500]
 

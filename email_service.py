@@ -26,7 +26,7 @@ def _send_email(msg: EmailMessage) -> bool:
         return False
 
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+        with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT), timeout=15) as server:
             server.starttls()
             server.login(SMTP_USER, SMTP_PASS)
             server.send_message(msg)

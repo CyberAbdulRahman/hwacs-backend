@@ -162,6 +162,15 @@ def _cleanup_discovery_session(session_id: str):
     except Exception:
         pass
 
+def send_otp_or_fail(email, otp_code):
+    email_sent = send_otp_email(email, otp_code)
+
+    if not email_sent:
+        return jsonify({
+            "error": "OTP email could not be sent. Please try again later."
+        }), 500
+
+    return None
 
 def _cleanup_expired_discovery_sessions():
     now = time.time()
@@ -688,7 +697,10 @@ def user_register():
     })
 
     otp_code = create_otp_session(email=email, purpose="user_signup")
-    send_otp_email(email, otp_code)
+    # send_otp change here
+    email_error = send_otp_or_fail(email, otp_code)
+    if email_error:
+     return email_error
 
     return jsonify({
         "message": "User registered. OTP sent to email.",
@@ -838,7 +850,9 @@ def user_login():
         return jsonify({"error": "Invalid email or password."}), 401
 
     otp_code = create_otp_session(email=email, purpose="user_login")
-    send_otp_email(email, otp_code)
+    email_error = send_otp_or_fail(email, otp_code)
+    if email_error:
+     return email_error
 
     _log_user_activity(
         user["email"],
@@ -908,7 +922,9 @@ def admin_login():
         return jsonify({"error": "Invalid email or password."}), 401
 
     otp_code = create_otp_session(email=email, purpose="admin_login")
-    send_otp_email(email, otp_code)
+    email_error = send_otp_or_fail(email, otp_code)
+    if email_error:
+     return email_error 
 
     _log_admin_activity(
         email,
@@ -1413,7 +1429,9 @@ def resend_otp():
     if not otp_code:
         return jsonify({"error": "Cannot resend OTP right now. Try later."}), 400
 
-    send_otp_email(email, otp_code)
+    email_error = send_otp_or_fail(email, otp_code)
+    if email_error:
+     return email_error
     return jsonify({"message": "OTP resent successfully."}), 200
 
 
@@ -1518,7 +1536,9 @@ def admin_request_password_change_otp():
         return jsonify({"error": "Current password is incorrect."}), 401
 
     otp_code = create_otp_session(email=email, purpose="admin_password_change")
-    send_otp_email(email, otp_code)
+    email_error = send_otp_or_fail(email, otp_code)
+    if email_error:
+     return email_error
 
     return jsonify({
         "message": "OTP sent to your admin email."
@@ -3730,7 +3750,9 @@ def user_request_password_change_otp():
         return jsonify({"error": "User email not found."}), 401
 
     otp_code = create_otp_session(email=email, purpose="user_password_change")
-    send_otp_email(email, otp_code)
+    email_error = send_otp_or_fail(email, otp_code)
+    if email_error:
+     return email_error
 
     return jsonify({
         "message": "OTP sent to your email."

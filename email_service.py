@@ -20,18 +20,42 @@ SENDER_NAME = os.getenv("SENDER_NAME", "HWACS Security")
 # ===============================
 # COMMON SMTP SENDER
 # ===============================
+# def _send_email(msg: EmailMessage) -> bool:
+#     if not (SMTP_USER and SMTP_PASS):
+#         print("❌ SMTP_USER / SMTP_PASS missing in .env")
+#         return False
+
+#     try:
+#         with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT), timeout=15) as server:
+#             server.starttls()
+#             server.login(SMTP_USER, SMTP_PASS)
+#             server.send_message(msg)
+
+#         return True
+#     except Exception as e:
+#         print("❌ Email sending failed:", e)
+#         return False
+
 def _send_email(msg: EmailMessage) -> bool:
     if not (SMTP_USER and SMTP_PASS):
         print("❌ SMTP_USER / SMTP_PASS missing in .env")
         return False
 
     try:
-        with smtplib.SMTP(SMTP_HOST, int(SMTP_PORT), timeout=15) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
+        port = int(SMTP_PORT)
+
+        if port == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, port, timeout=15) as server:
+                server.login(SMTP_USER, SMTP_PASS)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_HOST, port, timeout=15) as server:
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASS)
+                server.send_message(msg)
 
         return True
+
     except Exception as e:
         print("❌ Email sending failed:", e)
         return False

@@ -1,5 +1,6 @@
 import os
-
+from email.message import EmailMessage
+import resend
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -35,23 +36,44 @@ SENDER_NAME = os.getenv("SENDER_NAME", "HWACS Security")
 #         print("❌ Email sending failed:", e)
 #         return False
 
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "HWACS <onboarding@resend.dev>")
+
+
 def _send_email(msg: EmailMessage) -> bool:
-    if not (SMTP_USER and SMTP_PASS):
-        print("❌ SMTP_USER / SMTP_PASS missing in .env")
+    if not RESEND_API_KEY:
+        print("❌ RESEND_API_KEY missing in environment")
         return False
 
     try:
-        port = int(SMTP_PORT)
+        resend.api_key = RESEND_API_KEY
 
-        if port == 465:
-            with smtplib.SMTP_SSL(SMTP_HOST, port, timeout=15) as server:
-                server.login(SMTP_USER, SMTP_PASS)
-                server.send_message(msg)
+        to_email = msg["To"]
+        subject = msg["Subject"]
+
+        html_body = ""
+        text_body = ""
+
+        if msg.is_multipart():
+            for part in msg.walk():
+                content_type = part.get_content_type()
+
+                if content_type == "text/html":
+                    html_body = part.get_content()
+                elif content_type == "text/plain":
+                    text_body = part.get_content()
         else:
-            with smtplib.SMTP(SMTP_HOST, port, timeout=15) as server:
-                server.starttls()
-                server.login(SMTP_USER, SMTP_PASS)
-                server.send_message(msg)
+            if msg.get_content_type() == "text/html":
+                html_body = msg.get_content()
+            else:
+                text_body = msg.get_content()
+
+        resend.Emails.send({
+            "from": EMAIL_FROM,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body or f"<pre>{text_body}</pre>",
+        })
 
         return True
 

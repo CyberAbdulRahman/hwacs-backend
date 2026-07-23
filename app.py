@@ -226,7 +226,7 @@ def _looks_like_login_attempt(url: str, method: str, payload: str):
     method_l = (method or "").upper()
     payload_l = (payload or "").lower()
 
-    if method_l not in ["POST", "PUT", "PATCH"]:
+    if method_l not in ["GET" , "POST", "PUT", "PATCH"]:
         return False
 
     login_url_keywords = [
@@ -2653,6 +2653,181 @@ def fallback_attack_from_payload(payload: str):
         return "LFI", _detect_lfi_subtype(payload)
 
     return None, None
+
+PORT_SCAN_WINDOW_MINUTES = 2
+PORT_SCAN_UNIQUE_PATH_THRESHOLD = 12
+PORT_SCAN_SUSPICIOUS_PATH_THRESHOLD = 3
+
+OTP_BRUTE_FORCE_THRESHOLD = 5
+FORM_ABUSE_THRESHOLD = 20
+
+
+def _client_ip():
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip:
+        return cf_ip.strip()
+
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+
+    return request.remote_addr or "unknown"
+
+
+def _stringify_payload(value):
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        return value
+
+    try:
+        return json.dumps(value, default=str)
+    except Exception:
+        return str(value)
+
+
+def _extract_form_type(data, payload_text):
+    form_type = (data.get("formType") or data.get("form_type") or "").strip().lower()
+
+    if form_type:
+        return form_type
+
+    payload_l = (payload_text or "").lower()
+    url_l = (data.get("url") or data.get("page_url") or "").lower()
+
+    if "otp" in payload_l or "verification" in payload_l or "verify" in url_l or "otp" in url_l:
+        return "otp"
+
+    if "password" in payload_l or "pass" in payload_l or "login" in url_l or "admin" in url_l:
+        return "login"
+
+    if "search" in payload_l or "query" in payload_l or "search" in url_l:
+        return "search"
+
+    return "generic_form"
+
+
+def _detect_otp_bruteforce(site, url, method, payload_text, form_type):
+    if form_type != "otp":
+        return None
+
+    now = datetime.utcnow()
+    since = now - timedelta(minutes=BRUTE_FORCE_WINDOW_MINUTES)
+
+    ip = _client_ip()
+    site_id = str(site.get("_id"))
+
+    mongo.db.otp_attempts.insert_one({
+        "site_id": site_id,
+        "user_id": str(site.get("user_id")),
+        "honeypot": site.get("site_name", "Unknown"),
+        "ip": ip,
+        "url": url,
+        "method": method,
+        "payload": payload_text,
+        "created_at": now,
+    })
+
+    count = mongo.db.otp_attempts.count_documents({
+        "site_id": site_id,
+        "ip": ip,
+        "url": url,
+        "created_at": {"$gte": since},
+    })
+
+    if count >= OTP_BRUTE_FORCE_THRESHOLD:
+        return {
+            "attempt_count": count,
+            "threshold": OTP_BRUTE_FORCE_THRESHOLD,
+            "window_minutes": BRUTE_FORCE_WINDOW_MINUTES,
+            "ip": ip,
+            "decision_reason": "repeated_otp_attempts_detected",
+        }
+
+    return None
+
+
+def _looks_like_scan_path(path):
+    p = (path or "").lower()
+
+    suspicious_paths = [
+        ".env",
+        "wp-admin",
+        "wp-login",
+        "phpmyadmin",
+        "admin.php",
+        "config.php",
+        "server-status",
+        "xmlrpc.php",
+        "backup",
+        "db.sql",
+        "shell",
+        "cmd",
+        "cgi-bin",
+        "vendor",
+        "composer.json",
+        ".git",
+        "boaform",
+        "HNAP1",
+    ]
+
+    return any(x in p for x in suspicious_paths)
+
+
+def _detect_port_scan(site, url, method, status_code=None):
+    now = datetime.utcnow()
+    since = now - timedelta(minutes=PORT_SCAN_WINDOW_MINUTES)
+
+    ip = _client_ip()
+    site_id = str(site.get("_id"))
+    path = _extract_path_from_url(url)
+
+    is_suspicious_path = _looks_like_scan_path(path)
+
+    mongo.db.scan_attempts.insert_one({
+        "site_id": site_id,
+        "user_id": str(site.get("user_id")),
+        "honeypot": site.get("site_name", "Unknown"),
+        "ip": ip,
+        "url": url,
+        "path": path,
+        "method": method,
+        "status_code": status_code,
+        "is_suspicious_path": is_suspicious_path,
+        "created_at": now,
+    })
+
+    unique_paths = mongo.db.scan_attempts.distinct("path", {
+        "site_id": site_id,
+        "ip": ip,
+        "created_at": {"$gte": since},
+    })
+
+    suspicious_count = mongo.db.scan_attempts.count_documents({
+        "site_id": site_id,
+        "ip": ip,
+        "is_suspicious_path": True,
+        "created_at": {"$gte": since},
+    })
+
+    if len(unique_paths) >= PORT_SCAN_UNIQUE_PATH_THRESHOLD or suspicious_count >= PORT_SCAN_SUSPICIOUS_PATH_THRESHOLD:
+        return {
+            "unique_paths": len(unique_paths),
+            "suspicious_paths": suspicious_count,
+            "threshold_unique_paths": PORT_SCAN_UNIQUE_PATH_THRESHOLD,
+            "threshold_suspicious_paths": PORT_SCAN_SUSPICIOUS_PATH_THRESHOLD,
+            "window_minutes": PORT_SCAN_WINDOW_MINUTES,
+            "ip": ip,
+            "decision_reason": "many_paths_requested_from_same_ip",
+        }
+
+    return None
+
 @app.post("/api/honeypot/collect")
 def collect_attack():
     data = request.get_json(force=True) or {}
@@ -2664,13 +2839,19 @@ def collect_attack():
         return jsonify({"error": "Invalid API key"}), 401
 
     if not site.get("is_active", True):
-        return jsonify({"message": "Site is inactive. Collection skipped."}), 202
+        return jsonify({
+            "message": "Site is inactive. Collection skipped."
+        }), 202
 
-    
-        if not site.get("trap_enabled", True):
-          return jsonify({"message": "Trap is disabled. Collection skipped."}), 202
+    if not site.get("trap_enabled", True):
+        return jsonify({
+            "message": "Trap is disabled. Collection skipped."
+        }), 202
 
-    # ✅ PAGE-LEVEL TRAP CHECK START
+    # ---------------------------------------------------------
+    # NORMALIZE REQUEST INFORMATION
+    # ---------------------------------------------------------
+
     request_url = (
         data.get("url")
         or data.get("page_url")
@@ -2679,12 +2860,33 @@ def collect_attack():
         or ""
     )
 
+    request_method = (data.get("method") or "POST").upper()
+
+    raw_payload = data.get("payload")
+
+    if raw_payload is None:
+        raw_payload = (
+            data.get("fields")
+            or data.get("formData")
+            or data.get("body")
+            or ""
+        )
+
+    raw_payload = _stringify_payload(raw_payload)
+    decoded_payload = unquote_plus(raw_payload).strip()
+
+    form_type = _extract_form_type(data, decoded_payload)
+
+    # ---------------------------------------------------------
+    # PAGE-LEVEL TRAP CHECK
+    # ---------------------------------------------------------
+
     current_path = _extract_path_from_url(request_url)
 
     site_id = str(site.get("_id"))
     user_id = str(site.get("user_id", ""))
 
-    # ✅ Real traffic se page auto-save/update hoga
+    # Real traffic se page auto-save/update hoga
     _save_or_update_site_page(
         site_id=site_id,
         user_id=user_id,
@@ -2693,7 +2895,7 @@ def collect_attack():
         source="collector_auto"
     )
 
-    # ✅ Agar specific page ka trap OFF hai to attack detect/save nahi hoga
+    # Specific page ka trap OFF ho to request save nahi hogi
     if not _is_page_trap_enabled(site_id, current_path):
         return jsonify({
             "message": "Page trap is disabled. Request skipped.",
@@ -2701,17 +2903,31 @@ def collect_attack():
             "reason": "page_trap_disabled",
             "path": current_path
         }), 200
-    # ✅ PAGE-LEVEL TRAP CHECK END
 
-    raw_payload = (data.get("payload") or "").strip()
-    
-    decoded_payload = unquote_plus(raw_payload).strip()
+    # ---------------------------------------------------------
+    # BRUTE FORCE, OTP BRUTE FORCE AND PORT SCAN DETECTION
+    # ---------------------------------------------------------
 
     brute_force_debug = _detect_brute_force(
         site=site,
-        url=data.get("url"),
-        method=data.get("method"),
+        url=request_url,
+        method=request_method,
         payload=decoded_payload,
+    )
+
+    otp_bruteforce_debug = _detect_otp_bruteforce(
+        site=site,
+        url=request_url,
+        method=request_method,
+        payload_text=decoded_payload,
+        form_type=form_type,
+    )
+
+    port_scan_debug = _detect_port_scan(
+        site=site,
+        url=request_url,
+        method=request_method,
+        status_code=data.get("status_code"),
     )
 
     if brute_force_debug:
@@ -2720,8 +2936,25 @@ def collect_attack():
         confidence = 0.95
         err = None
         decision_debug = brute_force_debug
+
+    elif otp_bruteforce_debug:
+        pred = 4
+        attack_type = "Brute Force"
+        confidence = 0.95
+        err = None
+        decision_debug = otp_bruteforce_debug
+
+    elif port_scan_debug:
+        pred = 5
+        attack_type = "Port Scan"
+        confidence = 0.90
+        err = None
+        decision_debug = port_scan_debug
+
     else:
-        pred, attack_type, confidence, err, decision_debug = _predict(decoded_payload)
+        pred, attack_type, confidence, err, decision_debug = _predict(
+            decoded_payload
+        )
 
     if err:
         return jsonify({
@@ -2729,31 +2962,63 @@ def collect_attack():
             "details": err
         }), 500
 
+    # ---------------------------------------------------------
+    # ATTACK SUBTYPE
+    # ---------------------------------------------------------
+
     subtype = "N/A"
 
     if attack_type == "SQLi":
         subtype = _detect_sqli_subtype(decoded_payload)
+
     elif attack_type == "XSS":
         subtype = _detect_xss_subtype(decoded_payload)
+
     elif attack_type == "LFI":
         subtype = _detect_lfi_subtype(decoded_payload)
-    elif attack_type == "Brute Force":
-        subtype = "Repeated Login Attempts"
 
-    # fallback if model says Normal
+    elif attack_type == "Brute Force":
+        if form_type == "otp":
+            subtype = "Repeated OTP Attempts"
+        else:
+            subtype = "Repeated Login Attempts"
+
+    elif attack_type == "Port Scan":
+        subtype = "HTTP Path / Recon Scan"
+
+    # ---------------------------------------------------------
+    # FALLBACK DETECTION WHEN MODEL SAYS NORMAL
+    # ---------------------------------------------------------
+
     if attack_type == "Normal":
-        fallback_type, fallback_subtype = fallback_attack_from_payload(decoded_payload)
+        fallback_type, fallback_subtype = fallback_attack_from_payload(
+            decoded_payload
+        )
 
         if fallback_type:
             attack_type = fallback_type
             subtype = fallback_subtype or "N/A"
-            pred = {"SQLi": 1, "XSS": 2, "LFI": 3, "Brute Force": 4}.get(fallback_type, 0)
-            confidence = confidence if confidence is not None else 0.70
+
+            pred = {
+                "SQLi": 1,
+                "XSS": 2,
+                "LFI": 3,
+                "Brute Force": 4,
+                "Port Scan": 5,
+            }.get(fallback_type, 0)
+
+            confidence = (
+                confidence
+                if confidence is not None
+                else 0.70
+            )
+
             decision_debug = {
-                "decision_reason": "fallback_pattern_match_after_model_normal"
+                "decision_reason":
+                    "fallback_pattern_match_after_model_normal"
             }
 
-    # still normal => ignore
+    # Still normal, so ignore it
     if attack_type == "Normal":
         return jsonify({
             "message": "Normal request ignored",
@@ -2763,17 +3028,34 @@ def collect_attack():
             "confidence": confidence,
         }), 200
 
-    severity = _severity(attack_type, confidence, subtype)
-    safe_decision_debug = json.loads(json.dumps(decision_debug, default=str))
+    # ---------------------------------------------------------
+    # SAVE ATTACK
+    # ---------------------------------------------------------
+
+    severity = _severity(
+        attack_type,
+        confidence,
+        subtype
+    )
+
+    safe_decision_debug = json.loads(
+        json.dumps(decision_debug, default=str)
+    )
 
     attack_log = {
         "user_id": user_id,
-        "honeypot": site.get("site_name", data.get("honeypot", "DVWA")),
-        "url": data.get("url"),
-        "method": data.get("method"),
+        "honeypot": site.get(
+            "site_name",
+            data.get("honeypot", "DVWA")
+        ),
+        "url": request_url,
+        "path": current_path,
+        "method": request_method,
         "payload": decoded_payload,
         "raw_payload": raw_payload,
-        "ip": request.headers.get("X-Forwarded-For", request.remote_addr),
+        "form_type": form_type,
+        "status_code": data.get("status_code"),
+        "ip": _client_ip(),
         "user_agent": request.headers.get("User-Agent"),
         "created_at": datetime.utcnow().isoformat() + "Z",
         "label": pred,
@@ -2798,11 +3080,19 @@ def collect_attack():
         }
     )
 
+    # ---------------------------------------------------------
+    # CREATE NOTIFICATION
+    # ---------------------------------------------------------
+
     notification = {
         "user_id": user_id,
         "type": "attack",
         "title": f"{attack_type} attack detected",
-        "message": f"{attack_log['honeypot']} | {attack_log['method']} | {attack_log['url']}",
+        "message": (
+            f"{attack_log['honeypot']} | "
+            f"{attack_log['method']} | "
+            f"{attack_log['url']}"
+        ),
         "severity": severity.lower(),
         "attack_id": str(res.inserted_id),
         "read": False,
@@ -2811,8 +3101,14 @@ def collect_attack():
 
     mongo.db.notifications.insert_one(notification)
 
+    # ---------------------------------------------------------
+    # SEND EMAIL ALERT
+    # ---------------------------------------------------------
+
     try:
-        user_doc = users.find_one({"_id": ObjectId(user_id)})
+        user_doc = users.find_one({
+            "_id": ObjectId(user_id)
+        })
 
         if user_doc and user_doc.get("email"):
             send_attack_alert_email(
@@ -2823,6 +3119,7 @@ def collect_attack():
                 payload=attack_log["payload"],
                 severity=severity,
             )
+
     except Exception as e:
         print("Attack alert email failed:", str(e))
 

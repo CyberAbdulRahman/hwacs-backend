@@ -214,6 +214,15 @@ def _extract_login_identifier(payload: str):
                 return str(value[0]).strip().lower()
     except Exception:
         pass
+    try:
+        parsed_url = urlparse(payload)
+        parsed = parse_qs(parsed_url.query)
+        for key in ["email", "username", "user", "login", "uname"]:
+            value = parsed.get(key)
+            if value and len(value) > 0:
+                return str(value[0]).strip().lower()
+    except Exception:
+        pass
 
     return "unknown"
 
@@ -237,6 +246,8 @@ def _looks_like_login_attempt(url: str, method: str, payload: str):
         "account",
         "admin",
         "wp-login",
+        "brute",
+        "vulnerabilities/brute",
     ]
 
     password_keywords = [
@@ -264,7 +275,10 @@ def _detect_brute_force(site, url: str, method: str, payload: str):
 
     ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     site_id = str(site.get("_id"))
-    username = _extract_login_identifier(payload)
+    username = _extract_login_identifier(payload) or "unknown"
+
+    if username == "unknown":
+       username = _extract_login_identifier(url)
 
     attempt_doc = {
         "site_id": site_id,

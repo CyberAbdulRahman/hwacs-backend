@@ -277,8 +277,8 @@ def _detect_brute_force(site, url: str, method: str, payload: str):
     site_id = str(site.get("_id"))
     username = _extract_login_identifier(payload) or "unknown"
 
-    if username == "unknown":
-       username = _extract_login_identifier(url)
+    if username == "unknown":code 
+    username = _extract_login_identifier(url)
 
     attempt_doc = {
         "site_id": site_id,
@@ -2900,7 +2900,6 @@ def collect_attack():
     site_id = str(site.get("_id"))
     user_id = str(site.get("user_id", ""))
 
-    # Real traffic se page auto-save/update hoga
     _save_or_update_site_page(
         site_id=site_id,
         user_id=user_id,
@@ -2909,7 +2908,6 @@ def collect_attack():
         source="collector_auto"
     )
 
-    # Specific page ka trap OFF ho to request save nahi hogi
     if not _is_page_trap_enabled(site_id, current_path):
         return jsonify({
             "message": "Page trap is disabled. Request skipped.",
@@ -2944,6 +2942,21 @@ def collect_attack():
         status_code=data.get("status_code"),
     )
 
+    # Fallback brute-force check for DVWA/external login forms
+    # This is important because DVWA brute page can use GET.
+    if not brute_force_debug and str(form_type).lower() == "login":
+        brute_force_debug = _detect_brute_force(
+            site=site,
+            url=request_url,
+            method="POST",
+            payload=decoded_payload,
+        )
+
+    # ---------------------------------------------------------
+    # FINAL DECISION
+    # Rule-based detections must override ML prediction.
+    # ---------------------------------------------------------
+
     if brute_force_debug:
         pred = 4
         attack_type = "Brute Force"
@@ -2966,16 +2979,13 @@ def collect_attack():
         decision_debug = port_scan_debug
 
     else:
-        pred, attack_type, confidence, err, decision_debug = _predict(
-            decoded_payload
-        )
+        pred, attack_type, confidence, err, decision_debug = _predict(decoded_payload)
 
     if err:
         return jsonify({
             "error": "XAI model not ready",
             "details": err
         }), 500
-
     # ---------------------------------------------------------
     # ATTACK SUBTYPE
     # ---------------------------------------------------------

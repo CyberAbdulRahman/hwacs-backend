@@ -85,6 +85,8 @@ CORS(
                 "http://localhost:5173",
                 "http://127.0.0.1:5173",
                 "https://hwacs-frontend.vercel.app",
+                "https://hwacs.online",
+                "https://www.hwacs.online",
             ]
         }
     },

@@ -2956,7 +2956,46 @@ def collect_attack():
     # FINAL DECISION
     # Rule-based detections must override ML prediction.
     # ---------------------------------------------------------
+      # Strong fallback for external login brute-force attempts
+    if not brute_force_debug and str(form_type).lower() == "login":
+        now = datetime.utcnow()
+        since = now - timedelta(minutes=BRUTE_FORCE_WINDOW_MINUTES)
 
+        ip = _client_ip()
+        username = _extract_login_identifier(decoded_payload)
+
+        if username == "unknown":
+            username = _extract_login_identifier(request_url)
+
+        mongo.db.bruteforce_attempts.insert_one({
+            "site_id": site_id,
+            "user_id": user_id,
+            "honeypot": site.get("site_name", "Unknown"),
+            "ip": ip,
+            "username": username,
+            "url": request_url,
+            "method": request_method,
+            "payload": decoded_payload,
+            "form_type": form_type,
+            "created_at": now,
+        })
+
+        attempt_count = mongo.db.bruteforce_attempts.count_documents({
+            "site_id": site_id,
+            "ip": ip,
+            "username": username,
+            "created_at": {"$gte": since},
+        })
+
+        if attempt_count >= BRUTE_FORCE_THRESHOLD:
+            brute_force_debug = {
+                "attempt_count": attempt_count,
+                "threshold": BRUTE_FORCE_THRESHOLD,
+                "window_minutes": BRUTE_FORCE_WINDOW_MINUTES,
+                "ip": ip,
+                "username": username,
+                "decision_reason": "external_login_repeated_attempts_detected",
+            }
     if brute_force_debug:
         pred = 4
         attack_type = "Brute Force"

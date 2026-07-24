@@ -1,6 +1,7 @@
 
 # app.py
 import os
+import base64
 import json
 from services.browser_discovery_service import (
     discover_browser_pages,
@@ -2846,9 +2847,21 @@ def _detect_port_scan(site, url, method, status_code=None):
 def collect_attack():
     data = request.get_json(force=True) or {}
 
+    if data.get("payload_b64"):
+        try:
+            data["payload"] = base64.b64decode(data["payload_b64"]).decode("utf-8", errors="ignore")
+        except Exception:
+            data["payload"] = ""
+
+    if data.get("url_b64"):
+        try:
+            data["url"] = base64.b64decode(data["url_b64"]).decode("utf-8", errors="ignore")
+            data["page_url"] = data["url"]
+        except Exception:
+            pass
+
     api_key = request.headers.get("X-API-KEY")
     site = mongo.db.sites.find_one({"apiKey": api_key})
-
     if not site:
         return jsonify({"error": "Invalid API key"}), 401
 

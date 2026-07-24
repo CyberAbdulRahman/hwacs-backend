@@ -3003,6 +3003,16 @@ def collect_attack():
         err = None
         decision_debug = brute_force_debug
 
+    elif str(form_type).lower() == "lfi":
+        pred = 3
+        attack_type = "LFI"
+        confidence = 0.95
+        err = None
+        decision_debug = {
+            "decision_reason": "lfi_form_type_detected_from_collector",
+            "form_type": form_type
+        }
+
     elif otp_bruteforce_debug:
         pred = 4
         attack_type = "Brute Force"

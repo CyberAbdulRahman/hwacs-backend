@@ -3016,7 +3016,7 @@ def collect_attack():
         err = None
         decision_debug = brute_force_debug
 
-    elif str(form_type).lower() in ["lfi", "file_include_demo"]:
+    elif str(form_type).lower() in ["lfi", "file_include_demo" , "demo_file"]:
         pred = 3
         attack_type = "LFI"
         confidence = 0.95

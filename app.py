@@ -891,6 +891,53 @@ def user_login():
 # ✅ ADMIN AUTH (Login) — only after approved+activated
 # =========================================================
 
+
+@app.get("/api/auth/me/status")
+def my_account_status():
+    user, error = require_user()
+    if error:
+        return error
+
+    account_status = user.get("account_status", "active")
+    suspended_until = user.get("suspended_until")
+
+    # If suspension time passed, auto make active
+    if account_status == "suspended" and suspended_until:
+        try:
+            if suspended_until < datetime.utcnow():
+                mongo.db.users.update_one(
+                    {"_id": user["_id"]},
+                    {
+                        "$set": {"account_status": "active"},
+                        "$unset": {"suspended_until": ""}
+                    }
+                )
+
+                return jsonify({
+                    "status": "active",
+                    "message": "Account is active."
+                }), 200
+        except Exception:
+            pass
+
+    if account_status == "blocked":
+        return jsonify({
+            "status": "blocked",
+            "message": "Your account has been blocked by admin."
+        }), 403
+
+    if account_status == "suspended":
+        return jsonify({
+            "status": "suspended",
+            "message": "Your account has been suspended by admin.",
+            "suspended_until": str(suspended_until)
+        }), 403
+
+    return jsonify({
+        "status": "active",
+        "message": "Account is active."
+    }), 200
+
 @app.post("/api/auth/admin/login", endpoint="admin_login")
 def admin_login():
     data = _require_json()

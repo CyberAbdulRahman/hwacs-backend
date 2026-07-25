@@ -94,7 +94,7 @@ def send_otp_email(to_email: str, otp: str) -> bool:
 
     text_fallback = (
         f"Your HWACS verification code is: {otp}\n\n"
-        "This code will expire in 30 seconds.\n"
+        "This code will expire in 1 minute.\n"
         "If you didn’t request this, ignore this email."
     )
     msg.set_content(text_fallback)

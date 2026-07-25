@@ -894,31 +894,37 @@ def user_login():
 
 @app.get("/api/auth/me/status")
 def my_account_status():
-    user, error = require_user()
-    if error:
-        return error
+    token = _get_bearer_token()
+
+    if not token:
+        return jsonify({"error": "Missing Authorization Bearer token"}), 401
+
+    payload = verify_jwt(token)
+
+    if not payload:
+        return jsonify({"error": "Invalid or expired token"}), 401
+
+    if payload.get("role") != "user":
+        return jsonify({
+            "status": "active",
+            "message": "Admin status check skipped."
+        }), 200
+
+    user_id = payload.get("id")
+
+    if not user_id:
+        return jsonify({"error": "Invalid token payload"}), 401
+
+    try:
+        user = mongo.db.users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        return jsonify({"error": "Invalid user id"}), 401
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
     account_status = user.get("account_status", "active")
     suspended_until = user.get("suspended_until")
-
-    # If suspension time passed, auto make active
-    if account_status == "suspended" and suspended_until:
-        try:
-            if suspended_until < datetime.utcnow():
-                mongo.db.users.update_one(
-                    {"_id": user["_id"]},
-                    {
-                        "$set": {"account_status": "active"},
-                        "$unset": {"suspended_until": ""}
-                    }
-                )
-
-                return jsonify({
-                    "status": "active",
-                    "message": "Account is active."
-                }), 200
-        except Exception:
-            pass
 
     if account_status == "blocked":
         return jsonify({
@@ -927,6 +933,32 @@ def my_account_status():
         }), 403
 
     if account_status == "suspended":
+        # If suspension has expired, auto-activate user
+        if suspended_until:
+            try:
+                if isinstance(suspended_until, str):
+                    suspended_until_dt = datetime.fromisoformat(
+                        suspended_until.replace("Z", "")
+                    )
+                else:
+                    suspended_until_dt = suspended_until
+
+                if suspended_until_dt < datetime.utcnow():
+                    mongo.db.users.update_one(
+                        {"_id": user["_id"]},
+                        {
+                            "$set": {"account_status": "active"},
+                            "$unset": {"suspended_until": ""}
+                        }
+                    )
+
+                    return jsonify({
+                        "status": "active",
+                        "message": "Account is active."
+                    }), 200
+            except Exception:
+                pass
+
         return jsonify({
             "status": "suspended",
             "message": "Your account has been suspended by admin.",

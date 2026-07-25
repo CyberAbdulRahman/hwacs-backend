@@ -1,21 +1,29 @@
-# jwt_service.py
 import os
+from datetime import datetime, timedelta, timezone
 import jwt
-from datetime import datetime, timedelta
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-this-in-env")
-JWT_ALGO = "HS256"
-JWT_EXP_MINUTES = int(os.getenv("JWT_EXP_MINUTES", "60"))
+JWT_SECRET = os.getenv("JWT_SECRET", "change-this-secret")
+JWT_ALGORITHM = "HS256"
 
-def generate_jwt(user: dict) -> str:
-    payload = {
-        "user_id": str(user.get("_id")),
-        "email": user.get("email"),
-        "role": user.get("role", "user"),
-        "exp": datetime.utcnow() + timedelta(minutes=JWT_EXP_MINUTES),
-        "iat": datetime.utcnow(),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+# 5 minutes inactivity/expiry for demo
+JWT_EXPIRE_MINUTES = 5
 
-def verify_jwt(token: str) -> dict:
-    return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+
+def generate_jwt(payload: dict) -> str:
+    data = payload.copy()
+
+    now = datetime.now(timezone.utc)
+
+    data["iat"] = now
+    data["exp"] = now + timedelta(minutes=JWT_EXPIRE_MINUTES)
+
+    return jwt.encode(data, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_jwt(token: str):
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None

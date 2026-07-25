@@ -697,9 +697,16 @@ def user_register():
 
     if len(username) < 6:
         return jsonify({"error": "Username must be at least 6 characters."}), 400
+    
+    existing_user = users.find_one({"email": email})
+    existing_admin = admins.find_one({"email": email})
 
-    if users.find_one({"email": email}):
-        return jsonify({"error": "User already exists. Please login."}), 400
+    if existing_user or existing_admin:
+      return jsonify({
+        "error": "This email is already registered. Please use a different email."
+    }), 409
+
+
 
     users.insert_one({
         "firstName": firstName,
@@ -1060,11 +1067,16 @@ def admin_request_signup():
         return jsonify({"error": "Only @gmail.com email is allowed."}), 400
 
     if phone and not PHONE_RE.match(phone):
-        return jsonify({"error": "Invalid phone number."}), 400
+         return jsonify({"error": "Invalid phone number."}), 400
 
-    # Already admin?
-    if admins.find_one({"email": email}):
-        return jsonify({"error": "Admin already exists."}), 400
+    # ✅ Prevent same email in users/admins/admin_requests
+    existing_user = users.find_one({"email": email})
+    existing_admin = admins.find_one({"email": email})
+
+    if existing_user or existing_admin:
+        return jsonify({
+            "error": "This email is already registered. Please use a different email."
+        }), 409
 
     # Already requested?
     if admin_requests.find_one({
@@ -1072,6 +1084,8 @@ def admin_request_signup():
         "status": {"$in": ["pending", "approved"]}
     }):
         return jsonify({"error": "Admin request already submitted."}), 400
+
+
 
     # =====================================================
     # ✅ SAVE REQUEST IN DB

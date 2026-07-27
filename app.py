@@ -31,6 +31,7 @@ import secrets
 from xai.xai.ai_report_writer import generate_ai_report_sections
 load_dotenv()
 from bson import ObjectId
+
 from xai.xai.xai_report import (
      xai_bp,
     _predict,
@@ -2602,25 +2603,33 @@ def create_site():
         }
     }), 201
 
-@app.route("/api/auth/logout", methods=["POST"])
+@app.route("/api/auth/logout", methods=["POST", "OPTIONS"])
 @auth_required
 def logout():
-    user_id = request.user.get("_id") or request.user.get("id")
+    if request.method == "OPTIONS":
+        return ("", 204)
 
-    db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {
-            "$set": {
-                "status": "Inactive",
-                "is_online": False,
-                "last_logout": datetime.utcnow(),
-                "last_seen": datetime.utcnow()
+    token = _get_bearer_token()
+    payload = verify_jwt(token)
+
+    if not payload:
+        return jsonify({"message": "Logged out"}), 200
+
+    if payload.get("role") == "user":
+        user_id = payload.get("id")
+
+        db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {
+                "$set": {
+                    "is_online": False,
+                    "last_logout": datetime.utcnow(),
+                    "last_seen": datetime.utcnow()
+                }
             }
-        }
-    )
+        )
 
     return jsonify({"message": "Logged out successfully"}), 200
-
 # =========================================================
 # ✅ USER: Delete External Honeypot Site
 # =========================================================

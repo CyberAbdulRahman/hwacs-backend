@@ -1148,6 +1148,14 @@ def admin_request_signup():
 
     if phone and not PHONE_RE.match(phone):
          return jsonify({"error": "Invalid phone number."}), 400
+     
+         # ✅ HWACS allows only one primary admin account
+    primary_admin = admins.find_one({})
+
+    if primary_admin:
+        return jsonify({
+            "error": "Admin signup is closed. Primary admin already exists."
+        }), 403
 
     # ✅ Prevent same email in users/admins/admin_requests
     existing_user = users.find_one({"email": email})

@@ -2193,10 +2193,10 @@ def discover_site_authenticated_pages(site_id):
         login_url=login_url,
         username=username,
         password=password,
-        max_pages=80,
-        max_depth=2
+        max_pages=200,
+        max_depth=4
     ),
-    timeout_seconds=120
+    timeout_seconds=180
 )
 
         saved_count = _save_discovered_pages(

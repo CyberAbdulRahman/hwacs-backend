@@ -2307,7 +2307,7 @@ def admin_get_users():
     result = []
     now = datetime.utcnow()
 
-    for u in users.find({"is_verified": True}).sort("created_at", -1):
+    for u in users.find({"role": {"$ne": "admin"}}).sort("created_at", -1):
         user_id = str(u.get("_id"))
 
         honeypot_count = sites.count_documents({"user_id": user_id})

@@ -1,0 +1,132 @@
+{
+  "report_id": "e7471e7d4fe376e4",
+  "created_at": "2026-07-26T13:09:06Z",
+  "payload": "' UNION SELECT username,password FROM users --",
+  "label": 1,
+  "attack_type": "SQLi",
+  "subtype": "UNION-based SQLi",
+  "confidence": 0.904,
+  "explanation": [
+    {
+      "token": " user",
+      "tfidf": 0.19871781471022093
+    },
+    {
+      "token": " use",
+      "tfidf": 0.19385948087816898
+    },
+    {
+      "token": " us",
+      "tfidf": 0.18984356446385228
+    },
+    {
+      "token": "serna",
+      "tfidf": 0.16595268342886452
+    },
+    {
+      "token": "usern",
+      "tfidf": 0.16595268342886452
+    },
+    {
+      "token": "sern",
+      "tfidf": 0.16595268342886452
+    },
+    {
+      "token": "rname",
+      "tfidf": 0.16419640819099182
+    },
+    {
+      "token": "rnam",
+      "tfidf": 0.16419640819099182
+    },
+    {
+      "token": "ernam",
+      "tfidf": 0.16419640819099182
+    },
+    {
+      "token": "word ",
+      "tfidf": 0.15824054009093985
+    }
+  ],
+  "specific_explanation": [
+    "The payload contains UNION SELECT style syntax, commonly used to merge attacker queries with application queries.",
+    "This often indicates an attempt to extract additional database rows or columns.",
+    "Strong matched indicators: union_select, select_from",
+    "Weak matched indicators: select_keyword, union_keyword, comment_end"
+  ],
+  "meta": {
+    "ip": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.8894",
+    "path": "/api/xai/report",
+    "method": "POST"
+  },
+  "decision": {
+    "raw_pred": 1,
+    "proba": {
+      "0": 0.096,
+      "1": 0.904,
+      "2": 0.0,
+      "3": 0.0
+    },
+    "pattern_hits": {
+      "sqli": {
+        "strong": [
+          "union_select",
+          "select_from"
+        ],
+        "weak": [
+          "select_keyword",
+          "union_keyword",
+          "comment_end"
+        ]
+      },
+      "xss": {
+        "strong": [],
+        "weak": []
+      },
+      "lfi": {
+        "strong": [],
+        "weak": []
+      }
+    },
+    "decision_reason": "multi_allowed_choose_highest",
+    "thresholds": {
+      "sqli": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "xss": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "lfi": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      }
+    }
+  },
+  "summary": {
+    "message": "SQLi detected with subtype: UNION-based SQLi",
+    "severity": "CRITICAL"
+  },
+  "impact": {
+    "possible_impact": [
+      "Authentication bypass, unauthorized data access, or database fingerprinting.",
+      "Potential data extraction, modification, or destruction depending on permissions."
+    ]
+  },
+  "attack_preconditions": [
+    "User-controlled input reaches an SQL context without proper parameter binding.",
+    "The backend query construction allows attacker input to alter query structure."
+  ],
+  "mitigation": [
+    "Use parameterized queries or prepared statements everywhere.",
+    "Never concatenate untrusted input into SQL queries.",
+    "Apply least-privilege database accounts and suppress verbose DB errors."
+  ],
+  "ai_generated": false,
+  "ai_provider": "local_fallback"
+}

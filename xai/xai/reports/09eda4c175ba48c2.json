@@ -1,0 +1,130 @@
+{
+  "report_id": "09eda4c175ba48c2",
+  "created_at": "2026-07-26T13:37:41Z",
+  "payload": "<script>alert(1)</script>",
+  "label": 2,
+  "attack_type": "XSS",
+  "subtype": "Script-tag XSS",
+  "confidence": 0.992,
+  "explanation": [
+    {
+      "token": "ript>",
+      "tfidf": 0.24193641841208127
+    },
+    {
+      "token": "ipt>",
+      "tfidf": 0.24193641841208127
+    },
+    {
+      "token": "pt>",
+      "tfidf": 0.24193641841208127
+    },
+    {
+      "token": "ipt",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "cript",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "scrip",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "crip",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "ript",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "scri",
+      "tfidf": 0.2281226967544348
+    },
+    {
+      "token": "rip",
+      "tfidf": 0.2281226967544348
+    }
+  ],
+  "specific_explanation": [
+    "The payload contains a <script> tag, which is a direct client-side script injection pattern.",
+    "If rendered unsafely, the browser may execute attacker-controlled JavaScript.",
+    "Strong matched indicators: script_tag",
+    "Weak matched indicators: angle_brackets, alert_call"
+  ],
+  "meta": {
+    "ip": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.8894",
+    "path": "/api/xai/report",
+    "method": "POST"
+  },
+  "decision": {
+    "raw_pred": 2,
+    "proba": {
+      "0": 0.0022653367278158603,
+      "1": 0.005595228301208669,
+      "2": 0.992,
+      "3": 0.00013943497097547076
+    },
+    "pattern_hits": {
+      "sqli": {
+        "strong": [],
+        "weak": []
+      },
+      "xss": {
+        "strong": [
+          "script_tag"
+        ],
+        "weak": [
+          "angle_brackets",
+          "alert_call"
+        ]
+      },
+      "lfi": {
+        "strong": [],
+        "weak": []
+      }
+    },
+    "decision_reason": "multi_allowed_choose_highest",
+    "thresholds": {
+      "sqli": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "xss": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "lfi": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      }
+    }
+  },
+  "summary": {
+    "message": "XSS detected with subtype: Script-tag XSS",
+    "severity": "HIGH"
+  },
+  "impact": {
+    "possible_impact": [
+      "Execution of attacker-controlled JavaScript in the victim browser.",
+      "Session theft, token theft, UI manipulation, or phishing-style redirection."
+    ]
+  },
+  "attack_preconditions": [
+    "User-controlled data is rendered in browser output without proper escaping.",
+    "The application allows executable HTML or script-like payloads to reach the response."
+  ],
+  "mitigation": [
+    "Apply strict output encoding for HTML, attributes, URLs, and JavaScript contexts.",
+    "Enable Content-Security-Policy (CSP) to reduce script execution risk.",
+    "Sanitize rich HTML input with a strict allow-list if HTML is required."
+  ],
+  "ai_generated": false,
+  "ai_provider": "local_fallback"
+}

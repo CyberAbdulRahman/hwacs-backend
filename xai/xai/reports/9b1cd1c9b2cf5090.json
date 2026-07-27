@@ -1,0 +1,131 @@
+{
+  "report_id": "9b1cd1c9b2cf5090",
+  "created_at": "2026-07-26T13:04:15Z",
+  "payload": "' OR 1=1 --",
+  "label": 1,
+  "attack_type": "SQLi",
+  "subtype": "Boolean-based SQLi",
+  "confidence": 1.0,
+  "explanation": [
+    {
+      "token": " 1=1 ",
+      "tfidf": 0.3534514009149422
+    },
+    {
+      "token": "1=1 ",
+      "tfidf": 0.35157189576527603
+    },
+    {
+      "token": " 1=1",
+      "tfidf": 0.32192287060309516
+    },
+    {
+      "token": "1=1",
+      "tfidf": 0.31975960362916944
+    },
+    {
+      "token": " 1=",
+      "tfidf": 0.2844399549548886
+    },
+    {
+      "token": " ' ",
+      "tfidf": 0.2774344681815911
+    },
+    {
+      "token": " -- ",
+      "tfidf": 0.2774344681815911
+    },
+    {
+      "token": " --",
+      "tfidf": 0.2769294449019959
+    },
+    {
+      "token": "=1 ",
+      "tfidf": 0.23620151622312452
+    },
+    {
+      "token": " or ",
+      "tfidf": 0.23214811850464892
+    }
+  ],
+  "specific_explanation": [
+    "The payload uses boolean logic such as OR 1=1 or AND 1=1 to alter query truth conditions.",
+    "This pattern is commonly used for authentication bypass or blind condition testing.",
+    "Strong matched indicators: tautology_num, tautology_str",
+    "Weak matched indicators: or_keyword, comment_end"
+  ],
+  "meta": {
+    "ip": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.8894",
+    "path": "/api/xai/report",
+    "method": "POST"
+  },
+  "decision": {
+    "raw_pred": 1,
+    "proba": {
+      "0": 0.0,
+      "1": 1.0,
+      "2": 0.0,
+      "3": 0.0
+    },
+    "pattern_hits": {
+      "sqli": {
+        "strong": [
+          "tautology_num",
+          "tautology_str"
+        ],
+        "weak": [
+          "or_keyword",
+          "comment_end"
+        ]
+      },
+      "xss": {
+        "strong": [],
+        "weak": []
+      },
+      "lfi": {
+        "strong": [],
+        "weak": []
+      }
+    },
+    "decision_reason": "multi_allowed_choose_highest",
+    "thresholds": {
+      "sqli": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "xss": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "lfi": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      }
+    }
+  },
+  "summary": {
+    "message": "SQLi detected with subtype: Boolean-based SQLi",
+    "severity": "HIGH"
+  },
+  "impact": {
+    "possible_impact": [
+      "Authentication bypass, unauthorized data access, or database fingerprinting.",
+      "Potential data extraction, modification, or destruction depending on permissions."
+    ]
+  },
+  "attack_preconditions": [
+    "User-controlled input reaches an SQL context without proper parameter binding.",
+    "The backend query construction allows attacker input to alter query structure."
+  ],
+  "mitigation": [
+    "Use parameterized queries or prepared statements everywhere.",
+    "Never concatenate untrusted input into SQL queries.",
+    "Apply least-privilege database accounts and suppress verbose DB errors."
+  ],
+  "ai_generated": false,
+  "ai_provider": "local_fallback"
+}

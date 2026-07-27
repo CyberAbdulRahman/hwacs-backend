@@ -22,11 +22,13 @@ import secrets
 from urllib.parse import unquote_plus, parse_qs
 from datetime import datetime, timedelta
 from auth_middleware import auth_required
+from bson import ObjectId
 from auth_middleware import auth_required, admin_required
 from flask import Flask, request, jsonify , send_file
 from flask_cors import CORS
 from dotenv import load_dotenv
 import secrets
+from xai.xai.ai_report_writer import generate_ai_report_sections
 load_dotenv()
 from bson import ObjectId
 from xai.xai.xai_report import (
@@ -90,6 +92,8 @@ CORS(
                 "https://www.hwacs.online",
             ]
         }
+        
+        #Check
     },
     supports_credentials=True,
     allow_headers=["Content-Type", "Authorization", "X-API-KEY"],
@@ -228,6 +232,52 @@ def _extract_login_identifier(payload: str):
     return "unknown"
 
 
+def _rule_confidence_score(attack_type: str, payload: str, decision_debug: dict, form_type: str = ""):
+    payload_l = (payload or "").lower()
+    reasons = []
+    score = 0.60
+
+    if attack_type == "LFI":
+        if "dotdot_slash" in payload_l or "../" in payload_l or "..\\" in payload_l:
+            score += 0.12
+            reasons.append("Traversal indicator detected.")
+
+        if "passwd" in payload_l or "shadow" in payload_l or "system file" in payload_l:
+            score += 0.12
+            reasons.append("Sensitive system file target detected.")
+
+        if form_type in ["lfi", "file_include_demo", "demo_file"]:
+            score += 0.08
+            reasons.append("Collector marked the request as file-include related.")
+
+    elif attack_type == "Brute Force":
+        attempts = int(decision_debug.get("attempt_count", 0))
+        threshold = int(decision_debug.get("threshold", 5))
+
+        if attempts >= threshold:
+            score += 0.20
+            reasons.append(f"Repeated login attempts detected: {attempts}/{threshold}.")
+
+        if attempts >= threshold * 2:
+            score += 0.08
+            reasons.append("Attempt count is significantly above threshold.")
+
+    elif attack_type == "Port Scan":
+        unique_paths = int(decision_debug.get("unique_paths", 0))
+        suspicious_paths = int(decision_debug.get("suspicious_paths", 0))
+
+        if unique_paths >= 12:
+            score += 0.15
+            reasons.append(f"High number of unique paths requested: {unique_paths}.")
+
+        if suspicious_paths >= 3:
+            score += 0.15
+            reasons.append(f"Suspicious admin/config paths requested: {suspicious_paths}.")
+
+    final_score = min(score, 0.97)
+
+    return round(final_score, 4), reasons
+
 def _looks_like_login_attempt(url: str, method: str, payload: str):
     """
     Check karta hai ke request login/password type attempt lag rahi hai ya nahi.
@@ -278,8 +328,8 @@ def _detect_brute_force(site, url: str, method: str, payload: str):
     site_id = str(site.get("_id"))
     username = _extract_login_identifier(payload) or "unknown"
 
-    if username == "unknown":code 
-    username = _extract_login_identifier(url)
+    if username == "unknown":
+     username = _extract_login_identifier(url)
 
     attempt_doc = {
         "site_id": site_id,
@@ -706,8 +756,6 @@ def user_register():
         "error": "This email is already registered. Please use a different email."
     }), 409
 
-
-
     users.insert_one({
         "firstName": firstName,
         "lastName": lastName,
@@ -898,6 +946,36 @@ def user_login():
 # ✅ ADMIN AUTH (Login) — only after approved+activated
 # =========================================================
 
+@app.route("/api/auth/heartbeat", methods=["POST", "OPTIONS"])
+def heartbeat():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    token = _get_bearer_token()
+    payload = verify_jwt(token)
+
+    if not payload:
+        return jsonify({"error": "Invalid token"}), 401
+
+    if payload.get("role") != "user":
+        return jsonify({"message": "Admin heartbeat skipped"}), 200
+
+    user_id = payload.get("id")
+
+    try:
+        mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {
+                "$set": {
+                    "is_online": True,
+                    "last_seen": datetime.utcnow(),
+                }
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"message": "heartbeat updated"}), 200
 
 @app.get("/api/auth/me/status")
 def my_account_status():
@@ -2226,6 +2304,8 @@ def admin_get_users():
         return jsonify({"error": "Admin access required"}), 403
 
     result = []
+    now = datetime.utcnow()
+
     for u in users.find({"is_verified": True}).sort("created_at", -1):
         user_id = str(u.get("_id"))
 
@@ -2236,6 +2316,23 @@ def admin_get_users():
             sort=[("created_at", -1)]
         )
 
+        account_status = u.get("account_status", "active")
+        last_seen = u.get("last_seen")
+
+        is_online = False
+
+        if account_status == "active" and last_seen:
+            if isinstance(last_seen, str):
+                try:
+                    last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", ""))
+                except Exception:
+                    last_seen_dt = None
+            else:
+                last_seen_dt = last_seen
+
+            if last_seen_dt:
+                is_online = last_seen_dt >= now - timedelta(minutes=2)
+
         result.append({
             "_id": user_id,
             "name": u.get("name") or f"{u.get('firstName', '')} {u.get('lastName', '')}".strip() or "Unnamed User",
@@ -2245,8 +2342,12 @@ def admin_get_users():
             "honeypots": honeypot_count,
             "website": latest_site.get("base_url") if latest_site else "No website registered",
             "created_at": u.get("created_at"),
-            "account_status": u.get("account_status", "active"),
+            "account_status": account_status,
             "suspended_until": u.get("suspended_until").isoformat() if u.get("suspended_until") else None,
+
+            # online/offline fields
+            "is_online": is_online,
+            "last_seen": last_seen.isoformat() + "Z" if last_seen and not isinstance(last_seen, str) else last_seen,
         })
 
     return jsonify({"users": result}), 200
@@ -2942,21 +3043,28 @@ def collect_attack():
 
     if data.get("payload_b64"):
         try:
-            data["payload"] = base64.b64decode(data["payload_b64"]).decode("utf-8", errors="ignore")
+            data["payload"] = base64.b64decode(
+                data["payload_b64"]
+            ).decode("utf-8", errors="ignore")
         except Exception:
             data["payload"] = ""
 
     if data.get("url_b64"):
         try:
-            data["url"] = base64.b64decode(data["url_b64"]).decode("utf-8", errors="ignore")
+            data["url"] = base64.b64decode(
+                data["url_b64"]
+            ).decode("utf-8", errors="ignore")
             data["page_url"] = data["url"]
         except Exception:
             pass
 
     api_key = request.headers.get("X-API-KEY")
     site = mongo.db.sites.find_one({"apiKey": api_key})
+
     if not site:
-        return jsonify({"error": "Invalid API key"}), 401
+        return jsonify({
+            "error": "Invalid API key"
+        }), 401
 
     if not site.get("is_active", True):
         return jsonify({
@@ -3062,7 +3170,8 @@ def collect_attack():
     # FINAL DECISION
     # Rule-based detections must override ML prediction.
     # ---------------------------------------------------------
-      # Strong fallback for external login brute-force attempts
+
+    # Strong fallback for external login brute-force attempts
     if not brute_force_debug and str(form_type).lower() == "login":
         now = datetime.utcnow()
         since = now - timedelta(minutes=BRUTE_FORCE_WINDOW_MINUTES)
@@ -3100,8 +3209,11 @@ def collect_attack():
                 "window_minutes": BRUTE_FORCE_WINDOW_MINUTES,
                 "ip": ip,
                 "username": username,
-                "decision_reason": "external_login_repeated_attempts_detected",
+                "decision_reason": (
+                    "external_login_repeated_attempts_detected"
+                ),
             }
+
     if brute_force_debug:
         pred = 4
         attack_type = "Brute Force"
@@ -3109,15 +3221,29 @@ def collect_attack():
         err = None
         decision_debug = brute_force_debug
 
-    elif str(form_type).lower() in ["lfi", "file_include_demo" , "demo_file"]:
+    elif str(form_type).lower() in [
+        "lfi",
+        "file_include_demo",
+        "demo_file"
+    ]:
         pred = 3
         attack_type = "LFI"
-        confidence = 0.95
         err = None
+
         decision_debug = {
             "decision_reason": "lfi_form_type_detected_from_collector",
-            "form_type": form_type
+            "form_type": form_type,
+            "confidence_source": "rule_evidence_score"
         }
+
+        confidence, confidence_reasons = _rule_confidence_score(
+            attack_type=attack_type,
+            payload=decoded_payload,
+            decision_debug=decision_debug,
+            form_type=form_type
+        )
+
+        decision_debug["confidence_reasons"] = confidence_reasons
 
     elif otp_bruteforce_debug:
         pred = 4
@@ -3134,7 +3260,9 @@ def collect_attack():
         decision_debug = port_scan_debug
 
     else:
-        pred, attack_type, confidence, err, decision_debug = _predict(decoded_payload)
+        pred, attack_type, confidence, err, decision_debug = _predict(
+            decoded_payload
+        )
 
     if err:
         return jsonify({

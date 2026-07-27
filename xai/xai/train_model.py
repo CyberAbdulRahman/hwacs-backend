@@ -22,31 +22,43 @@ def main():
     if "payload" not in df.columns or "label" not in df.columns:
         raise ValueError("CSV must have columns: payload,label")
 
-    X = df["payload"].astype(str)
-    y = df["label"].astype(int)
+# ✅ Clean dataset before training
+    df = df.dropna(subset=["payload", "label"]).copy()
+
+    df["payload"] = df["payload"].astype(str).str.strip()
+    df = df[df["payload"] != ""]
+
+    df["label"] = pd.to_numeric(df["label"], errors="coerce")
+    df = df.dropna(subset=["label"]).copy()
+    df["label"] = df["label"].astype(int)
+
+    X = df["payload"]
+    y= df["label"]
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
 
     vectorizer = TfidfVectorizer(
-        ngram_range=(1, 3),
-        lowercase=True,
-        min_df=1,
-        max_features=5000
-    )
+    analyzer="char_wb",
+    ngram_range=(3, 5),
+    lowercase=True,
+    min_df=1,
+    max_df=0.95,
+    max_features=12000,
+    sublinear_tf=True
+)
 
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
 
     # ✅ Random Forest
     model = RandomForestClassifier(
-        n_estimators=300,
-        random_state=42,
-        class_weight="balanced",
-        n_jobs=-1
-    )
-
+    n_estimators=500,
+    random_state=42,
+    class_weight="balanced_subsample",
+    n_jobs=-1
+)
     model.fit(X_train_vec, y_train)
 
     preds = model.predict(X_test_vec)

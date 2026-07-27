@@ -1,0 +1,160 @@
+{
+  "report_id": "8efcd81c8fa77f71",
+  "created_at": "2026-07-26T13:41:31Z",
+  "payload": "<script>alert(1)</script>",
+  "label": 2,
+  "attack_type": "XSS",
+  "subtype": "Script-tag XSS",
+  "confidence": 0.992,
+  "explanation": [
+    {
+      "token": "ript>",
+      "tfidf": 0.24193641841208127
+    },
+    {
+      "token": "ipt>",
+      "tfidf": 0.24193641841208127
+    },
+    {
+      "token": "pt>",
+      "tfidf": 0.24193641841208127
+    },
+    {
+      "token": "ipt",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "cript",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "scrip",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "crip",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "ript",
+      "tfidf": 0.2299576770215049
+    },
+    {
+      "token": "scri",
+      "tfidf": 0.2281226967544348
+    },
+    {
+      "token": "rip",
+      "tfidf": 0.2281226967544348
+    }
+  ],
+  "specific_explanation": [
+    "The payload contains a <script> tag, which is a direct client-side script injection pattern.",
+    "If rendered unsafely, the browser may execute attacker-controlled JavaScript.",
+    "Strong matched indicators: script_tag",
+    "Weak matched indicators: angle_brackets, alert_call"
+  ],
+  "meta": {
+    "ip": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.8894",
+    "path": "/api/xai/report",
+    "method": "POST"
+  },
+  "decision": {
+    "raw_pred": 2,
+    "proba": {
+      "0": 0.0022653367278158603,
+      "1": 0.005595228301208669,
+      "2": 0.992,
+      "3": 0.00013943497097547076
+    },
+    "pattern_hits": {
+      "sqli": {
+        "strong": [],
+        "weak": []
+      },
+      "xss": {
+        "strong": [
+          "script_tag"
+        ],
+        "weak": [
+          "angle_brackets",
+          "alert_call"
+        ]
+      },
+      "lfi": {
+        "strong": [],
+        "weak": []
+      }
+    },
+    "decision_reason": "multi_allowed_choose_highest",
+    "thresholds": {
+      "sqli": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "xss": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      },
+      "lfi": {
+        "no_pattern_min": 0.85,
+        "weak_min": 0.8,
+        "strong_min": 0.6
+      }
+    }
+  },
+  "summary": {
+    "message": "A high-severity Cross-Site Scripting (XSS) payload classified as Script-tag XSS was detected in a POST request to /api/xai/report originating from IP address 127.0.0.1 using a WindowsPowerShell user agent. The payload <script>alert(1)</script> was identified with a model probability score of 0.992.",
+    "severity": "HIGH"
+  },
+  "impact": {
+    "possible_impact": [
+      "Execution of attacker-controlled JavaScript in the victim browser.",
+      "Session theft, token theft, UI manipulation, or phishing-style redirection."
+    ]
+  },
+  "attack_preconditions": [
+    "User-controlled data is rendered in browser output without proper escaping.",
+    "The application allows executable HTML or script-like payloads to reach the response."
+  ],
+  "mitigation": [
+    "Apply strict output encoding for HTML, attributes, URLs, and JavaScript contexts.",
+    "Enable Content-Security-Policy (CSP) to reduce script execution risk.",
+    "Sanitize rich HTML input with a strict allow-list if HTML is required."
+  ],
+  "ai_generated": true,
+  "ai_provider": "gemini",
+  "ai_sections": {
+    "executive_summary": "A high-severity Cross-Site Scripting (XSS) payload classified as Script-tag XSS was detected in a POST request to /api/xai/report originating from IP address 127.0.0.1 using a WindowsPowerShell user agent. The payload <script>alert(1)</script> was identified with a model probability score of 0.992.",
+    "why_detected": [
+      "The payload contains a explicit script tag construct paired with an alert call JavaScript function.",
+      "Pattern detection identified strong indicator script_tag along with weak indicators angle_brackets and alert_call.",
+      "Top TF-IDF feature tokens including ript>, ipt>, pt>, and cript contributed heavily to the model classification."
+    ],
+    "confidence_explanation": "The model produced a confidence score of 0.992 for XSS (class index 2), which far exceeds the strong pattern threshold of 0.6. The final classification decision was resolved using the multi_allowed_choose_highest logic.",
+    "potential_impact": [
+      "Execution of attacker-controlled JavaScript in the victim browser.",
+      "Session theft, token theft, UI manipulation, or phishing-style redirection."
+    ],
+    "recommended_protections": [
+      "Apply strict output encoding for HTML, attributes, URLs, and JavaScript contexts.",
+      "Enable Content-Security-Policy (CSP) to reduce script execution risk.",
+      "Sanitize rich HTML input with a strict allow-list if HTML is required."
+    ],
+    "attack_preconditions": [
+      "User-controlled data is rendered in browser output without proper escaping.",
+      "The application allows executable HTML or script-like payloads to reach the response."
+    ],
+    "analyst_note": "The request originated from a PowerShell client targeting /api/xai/report. While the payload represents a standard proof-of-concept alert attempt, actual exploitation is contingent upon whether the endpoint echoes or stores this input for presentation in a web browser context without sanitization."
+  },
+  "ai_explanation": [
+    "The payload contains a explicit script tag construct paired with an alert call JavaScript function.",
+    "Pattern detection identified strong indicator script_tag along with weak indicators angle_brackets and alert_call.",
+    "Top TF-IDF feature tokens including ript>, ipt>, pt>, and cript contributed heavily to the model classification."
+  ],
+  "ai_confidence_explanation": "The model produced a confidence score of 0.992 for XSS (class index 2), which far exceeds the strong pattern threshold of 0.6. The final classification decision was resolved using the multi_allowed_choose_highest logic.",
+  "analyst_note": "The request originated from a PowerShell client targeting /api/xai/report. While the payload represents a standard proof-of-concept alert attempt, actual exploitation is contingent upon whether the endpoint echoes or stores this input for presentation in a web browser context without sanitization."
+}

@@ -2322,18 +2322,19 @@ def admin_get_users():
         stored_is_online = bool(u.get("is_online", False))
 
         is_online = False
+        last_seen_dt = None
 
-        if account_status == "active" and stored_is_online and last_seen:
+        if last_seen:
             if isinstance(last_seen, str):
                 try:
                     last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", ""))
                 except Exception:
                     last_seen_dt = None
-    else:
-        last_seen_dt = last_seen
+            else:
+                last_seen_dt = last_seen
 
-    if last_seen_dt:
-        is_online = last_seen_dt >= now - timedelta(seconds=45)
+        if account_status == "active" and stored_is_online and last_seen_dt:
+            is_online = last_seen_dt >= now - timedelta(seconds=45)
 
         result.append({
             "_id": user_id,
@@ -2346,14 +2347,15 @@ def admin_get_users():
             "created_at": u.get("created_at"),
             "account_status": account_status,
             "suspended_until": u.get("suspended_until").isoformat() if u.get("suspended_until") else None,
-
-            # online/offline fields
             "is_online": is_online,
             "last_seen": last_seen.isoformat() + "Z" if last_seen and not isinstance(last_seen, str) else last_seen,
         })
 
-    return jsonify({"users": result}), 200
-
+    return jsonify({
+        "route_version": "admin_users_all_users_v3",
+        "count": len(result),
+        "users": result
+    }), 200
 
 
 

@@ -26,6 +26,7 @@ from bson import ObjectId
 from auth_middleware import auth_required, admin_required
 from flask import Flask, request, jsonify , send_file
 from flask_cors import CORS
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 import secrets
 from xai.xai.ai_report_writer import generate_ai_report_sections
@@ -2131,6 +2132,10 @@ def discover_site_browser_pages(site_id):
             "details": str(e)
         }), 500
         
+def _run_sync_playwright_job(job, timeout_seconds=120):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(job)
+        return future.result(timeout=timeout_seconds)
         
 @app.route("/api/sites/<site_id>/discover-auth-pages", methods=["POST", "OPTIONS"])
 def discover_site_authenticated_pages(site_id):
@@ -2174,14 +2179,17 @@ def discover_site_authenticated_pages(site_id):
         return jsonify({"error": "Site base URL not found"}), 400
 
     try:
-        discovered_pages = discover_authenticated_pages(
-            base_url=base_url,
-            login_url=login_url,
-            username=username,
-            password=password,
-            max_pages=80,
-            max_depth=2
-        )
+        discovered_pages = _run_sync_playwright_job(
+          lambda: discover_authenticated_pages(
+        base_url=base_url,
+        login_url=login_url,
+        username=username,
+        password=password,
+        max_pages=80,
+        max_depth=2
+    ),
+    timeout_seconds=120
+)
 
         saved_count = _save_discovered_pages(
             site_id=str(site.get("_id")),

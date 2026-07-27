@@ -6,7 +6,7 @@ JWT_SECRET = os.getenv("JWT_SECRET", "change-this-secret")
 JWT_ALGORITHM = "HS256"
 
 # 5 minutes inactivity/expiry for demo
-JWT_EXPIRE_MINUTES = 5
+JWT_EXPIRE_MINUTES = 1440
 
 
 def generate_jwt(payload: dict) -> str:

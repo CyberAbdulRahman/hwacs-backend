@@ -2319,20 +2319,21 @@ def admin_get_users():
 
         account_status = u.get("account_status", "active")
         last_seen = u.get("last_seen")
+        stored_is_online = bool(u.get("is_online", False))
 
         is_online = False
 
-        if account_status == "active" and last_seen:
+        if account_status == "active" and stored_is_online and last_seen:
             if isinstance(last_seen, str):
                 try:
                     last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", ""))
                 except Exception:
                     last_seen_dt = None
-            else:
-                last_seen_dt = last_seen
+    else:
+        last_seen_dt = last_seen
 
-            if last_seen_dt:
-                is_online = last_seen_dt >= now - timedelta(minutes=2)
+    if last_seen_dt:
+        is_online = last_seen_dt >= now - timedelta(seconds=45)
 
         result.append({
             "_id": user_id,
@@ -2604,7 +2605,6 @@ def create_site():
     }), 201
 
 @app.route("/api/auth/logout", methods=["POST", "OPTIONS"])
-@auth_required
 def logout():
     if request.method == "OPTIONS":
         return ("", 204)

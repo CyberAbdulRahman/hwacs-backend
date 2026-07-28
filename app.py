@@ -12,7 +12,7 @@ from services.browser_discovery_service import (
 )
 from services.page_discovery_service import discover_public_pages
 from urllib.parse import unquote_plus
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus ,  urljoin
 from urllib.parse import urlparse
 import hashlib
 import re
@@ -2144,13 +2144,63 @@ def _run_sync_playwright_job(job, timeout_seconds=120):
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(job)
         return future.result(timeout=timeout_seconds)
-        
+def _known_lab_pages(base_url, site_name=""):
+    base_url = (base_url or "").rstrip("/") + "/"
+    name = (site_name or "").lower()
+
+    dvwa_pages = [
+        "",
+        "login.php",
+        "index.php",
+        "security.php",
+        "setup.php",
+        "instructions.php",
+        "vulnerabilities/brute/",
+        "vulnerabilities/exec/",
+        "vulnerabilities/csrf/",
+        "vulnerabilities/fi/",
+        "vulnerabilities/sqli/",
+        "vulnerabilities/sqli_blind/",
+        "vulnerabilities/xss_d/",
+        "vulnerabilities/xss_r/",
+        "vulnerabilities/xss_s/",
+        "vulnerabilities/upload/",
+        "vulnerabilities/captcha/",
+    ]
+
+    bwapp_pages = [
+        "",
+        "login.php",
+        "portal.php",
+        "bugs.php",
+        "security_level_set.php",
+        "sqli_1.php",
+        "sqli_2.php",
+        "xss_get.php",
+        "xss_post.php",
+        "xss_stored_1.php",
+        "xss_stored_2.php",
+        "lfi_sqlitemanager.php",
+        "rlfi.php",
+        "commandi.php",
+        "directory_traversal_1.php",
+        "password_change.php",
+    ]
+
+    if "dvwa" in name:
+        return [urljoin(base_url, page) for page in dvwa_pages]
+
+    if "bwapp" in name:
+        return [urljoin(base_url, page) for page in bwapp_pages]
+
+    return []  
 @app.route("/api/sites/<site_id>/discover-auth-pages", methods=["POST", "OPTIONS"])
 def discover_site_authenticated_pages(site_id):
     if request.method == "OPTIONS":
         return ("", 204)
 
     actor, is_admin, err, status = _get_request_actor()
+
     if err:
         return err, status
 
@@ -2158,6 +2208,7 @@ def discover_site_authenticated_pages(site_id):
         return jsonify({"error": "Invalid site id"}), 400
 
     site = sites.find_one({"_id": ObjectId(site_id)})
+
     if not site:
         return jsonify({"error": "Site not found"}), 404
 
@@ -2188,16 +2239,25 @@ def discover_site_authenticated_pages(site_id):
 
     try:
         discovered_pages = _run_sync_playwright_job(
-          lambda: discover_authenticated_pages(
-        base_url=base_url,
-        login_url=login_url,
-        username=username,
-        password=password,
-        max_pages=200,
-        max_depth=4
-    ),
-    timeout_seconds=180
-)
+            lambda: discover_authenticated_pages(
+                base_url=base_url,
+                login_url=login_url,
+                username=username,
+                password=password,
+                max_pages=200,
+                max_depth=4
+            ),
+            timeout_seconds=180
+        )
+
+        extra_pages = _known_lab_pages(
+            base_url,
+            site.get("site_name") or site.get("name") or ""
+        )
+
+        discovered_pages = list(
+            set((discovered_pages or []) + extra_pages)
+        )
 
         saved_count = _save_discovered_pages(
             site_id=str(site.get("_id")),
@@ -2215,11 +2275,11 @@ def discover_site_authenticated_pages(site_id):
 
     except Exception as e:
         print("Authenticated discovery failed:", str(e))
+
         return jsonify({
             "error": "Authenticated discovery failed.",
             "details": str(e)
         }), 500
-
 
 @app.route("/api/sites/<site_id>/pages", methods=["GET", "OPTIONS"])
 def get_site_pages(site_id):
